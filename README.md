@@ -7,3 +7,5 @@ Riddick B. 2016. Toward Identification of Genetic Components of Fungal Immunity 
 Workflow was adapted from scripts provided by Jessica Keffer and scripts provided by a course taught by Dr. Shawn Polson.
 
 All scripts were run in Biomix on an Ubuntu operating system terminal using Linux language unless specified. Version names are listed in the workflow document as applicable.
+
+For the order in which scripts were run, see Workflow.
