@@ -1,0 +1,136 @@
+Files (180411_Donofrio.tar, 180812-Donofrio.tar, ND-5837.tar.gz) were copied to the working drive using cp.
+.tar files were extracted with tar -xvf. Now all files were in .fastq.gz format.
+Ran fqc.sh
+Ran fastqc_agg.sh
+Unzipped files with unzip \*zip
+Ran cutadapt.sh
+Ran trim_galore.sh
+Ran Combine_Reps.sh. This combines 72 samples into 36 new ones.
+Ran fqc.sh on combined samples
+Ran fastqc_agg.sh on combined samples.
+Obtained the RefSeq genome assembly data from NCBI: https://ftp.ncbi.nlm.nih.gov/genomes/refseq/fungi/Pyricularia_oryzae/latest_assembly_versions/GCF_000002495.2_MG8/ (22 March 2023)
+Files: GCF_000002495.2_MG8_cds_from_genomic.fna.gz, GCF_000002495.2_MG8_rna_from_genomic.fna.gz, GCF_000002495.2_MG8_genomic.gff.gz, GCF_000002495.2_MG8_genomic.gbff.gz, GCF_000002495.2_MG8_genomic.fna.gz
+Unzipped with gunzip *gz
+Converted .fna format (fasta nucleic acid) to .fa (fasta) format
+Ran hisat2.sh. Version used was HISAT2 version 2.2.1.
+Ran the mapping script for each of the 36 input files.
+Ran bamindex.slurm for each of the 36 input files. This used samtools version 1.19.
+Ran count_exons.slurm
+Saved count files.
+
+Subsequent analyses were run in R version 4.2.3. The following packages were loaded in:
+pheatmap version 1.10.12
+RColorBrewer version 1.1-3
+BiocManager 1.30.20 (Bioconductor version 3.16)
+DESeq2 version 4.2.2
+genefilter version 4.2.2
+edgeR version 3.40.2
+statmod version 1.5.0
+
+#Count files were loaded in:
+count_files<-c("file1.count.txt",..."file36.count.txt")
+
+#Magnaporthe oryzae strain data was loaded in:
+strains<-c("4091",..."pth11")
+
+#Treatment data was loaded in:
+treatment<-c("Buffer",..."C3"..."S4")
+
+#Timepoint data was loaded in:
+time<-c("0_hpi",..."3_hpi",..."9_hpi")
+
+#Sample names were loaded in:
+samples<-c("4091vB1R1",...)
+
+#Dataframes were created from this data:
+treatment_table<-data.frame(sampleName=samples, fileName=count_files, condition=treatment)
+time_table<-data.frame(sampleName=samples, fileName=count_files, condition=time)
+strains_table<-data.frame(sampleName=samples, fileName=count_files, condition=strains)
+
+#DESeq Datasets were created:
+treatment_data<-DESeqDataSetFromHTSeqCount(sampleTable=treatment_table, design= ~ condition)
+time_data<-DESeqDataSetFromHTSeqCount(sampleTable=time_table, design= ~ condition)
+strain_data<-DESeqDataSetFromHTSeqCount(sampleTable=strains_table, design= ~ condition)
+
+#Ran regularized log transformation:
+treat_rlog<- rlog(treatment_data, blind=FALSE)
+time_rlog<- rlog(time_data, blind=FALSE)
+strain_rlog<- rlog(strain_data, blind=FALSE)
+
+#Created simple distance heatmaps:
+colors <- colorRampPalette (rev(brewer.pal(9, "Blues"))) (255)
+treat_dists<-dist(t(assay(treat_rlog)))
+treatment_matrix<-as.matrix(treat_dists)
+pheatmap(treatment_matrix, col=colors)
+strain_dist<-dist(t(assay(strain_rlog)))
+strain_matrix<-as.matrix(strain_dist)
+pheatmap(strain_matrix, col=colors)
+time_dist<-dist(t(assay(time_rlog)))
+time_matrix<-as.matrix(time_dist)
+pheatmap(time_matrix, col=colors)
+
+#Created PCA plots:
+plotPCA(time_rlog, intgroup="condition")
+plotPCA(treat_rlog, intgroup="condition")
+plotPCA(strain_rlog, intgroup="condition")
+
+#Created heatmaps of most variable genes. Variances were calculated based on regularized log transformed data converted to a matrix. This matrix was converted to a dataframe.
+treatVars<-rowVars(assay(treat_rlog))
+treatVarsOrdered<-order(treatVars, decreasing=TRUE)
+treatTopVar<-head(treatVarsOrdered, 50)
+treat_matrix<-assay(treat_rlog)[treatTopVar, ]
+treat_matrix<-treat_matrix-rowMeans(treat_matrix)
+treat_df<-as.data.frame(colData(treat_rlog)[,c("condition"),drop=FALSE])
+clear_col_names<-paste(treat_rlog$condition,sep=".")
+topGenesHeatmap <- pheatmap(treat_matrix, annotation_col=treat_df, labels_col=clear_col_names)
+timeVars<-rowVars(assay(time_rlog))
+timeVarsOrdered<-order(timeVars, decreasing=TRUE)
+timeTopVar<-head(timeVarsOrdered, 50)
+time_matrix<-assay(time_rlog)[timeTopVar, ]
+time_matrix<-time_matrix-rowMeans(time_matrix)
+time_df<-as.data.frame(colData(time_rlog)[,c("condition"),drop=FALSE])
+clear_col_names<-paste(time_rlog$condition,sep=".")
+topGenesHeatmap <- pheatmap(time_matrix, annotation_col=treat_df, labels_col=clear_col_names)
+strainVars<-rowVars(assay(strain_rlog))
+strainVarsOrdered<-order(strainVars, decreasing=TRUE)
+strainTopVar<-head(strainVarsOrdered, 50)
+strain_matrix<-assay(strain_rlog)[strainTopVar, ]
+strain_matrix<-strain_matrix-rowMeans(strain_matrix)
+strain_df<-as.data.frame(colData(strain_rlog)[,c("condition"),drop=FALSE])
+clear_col_names<-paste(strain_rlog$condition,sep=".")
+topGenesHeatmap <- pheatmap(strain_matrix, annotation_col=treat_df, labels_col=clear_col_names)
+
+#Repeat these processes as needed for different subsets of the data.
+
+#Created a dataframe to convert to DGE:
+table <-data.frame(sampleName=samples, fileName=files, condition=treatment)
+
+#Convert to DGE:
+DGE <-readDGE(files, group=treatment, labels=samples)
+
+#Calculate normalization factors:
+DGE <-calcNormFactors(DGE)
+
+#Create multidimensional scaling (MDS) plot:
+plotMDS(DGE)
+
+#Calculate dispersion:
+DGE <- estimateDisp(DGE)
+
+#Plot biological coefficient of variation (BCV):
+plotBCV(DGE)
+
+#Perform Exact Test:
+exact_test <- exactTest(DGE, pair=c("Buffer","S4"))
+
+#Create a smear plot:
+DEtags <- rownames(DGE)[as.logical(de)]
+plotSmear(exact_test, de.tags=DEtags)
+
+#Create a table of exact test results:
+DEgenes <- topTags(exact_test, n=1000, p.value=0.05)
+head(diffExpGenes$table)
+head(DEgenes$table)
+write.table(DEgenes$table, file="B_v_S4_exactTest.txt",sep="\t",row.names=TRUE, col.names=NA)
+
+End.
